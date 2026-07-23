@@ -1,0 +1,43 @@
+services:
+  ai-gateway:
+    build: ./services/ai-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_DEFAULT_MODEL=${OPENROUTER_DEFAULT_MODEL:-openai/gpt-4o-mini}
+      - API_KEY=${API_KEY:-}
+    restart: unless-stopped
+
+  opportunity-engine:
+    build: ./services/opportunity-engine
+    ports:
+      - "3001:3001"
+    environment:
+      - AI_GATEWAY_URL=http://ai-gateway:3000
+      - API_KEY=${API_KEY:-}
+    volumes:
+      - ./storage/db/opportunity-engine:/app/data
+    depends_on:
+      - ai-gateway
+    restart: unless-stopped
+
+  youtube-worker:
+    build: ./services/youtube-worker
+    ports:
+      - "3002:3002"
+    environment:
+      - OPPORTUNITY_ENGINE_URL=http://opportunity-engine:3001
+      - API_KEY=${API_KEY:-}
+      - VIDEO_STORAGE_DIR=/app/videos
+      - YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID:-}
+      - YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET:-}
+      - YOUTUBE_REFRESH_TOKEN=${YOUTUBE_REFRESH_TOKEN:-}
+      - YOUTUBE_DEFAULT_PRIVACY=${YOUTUBE_DEFAULT_PRIVACY:-private}
+    volumes:
+      - ./storage/db/youtube-worker:/app/data
+      - ./storage/videos:/app/videos
+    depends_on:
+      - ai-gateway
+      - opportunity-engine
+    restart: unless-stopped

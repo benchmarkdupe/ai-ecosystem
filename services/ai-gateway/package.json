@@ -1,0 +1,13 @@
+{
+  "name": "ai-gateway",
+  "version": "1.0.0",
+  "description": "Proxies AI generation requests to OpenRouter for the AI Ecosystem services.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}

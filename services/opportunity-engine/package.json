@@ -1,0 +1,15 @@
+{
+  "name": "opportunity-engine",
+  "version": "1.0.0",
+  "description": "Evaluates business/opportunity ideas via the AI Gateway and returns structured scoring analysis.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
