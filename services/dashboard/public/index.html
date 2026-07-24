@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Ecosystem — YouTube Automation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>YouTube Automation</h1>
+    <div class="status-lights" id="status-lights">
+      <span class="light" id="status-opportunity" title="opportunity-engine">opportunity-engine</span>
+      <span class="light" id="status-youtube" title="youtube-worker">youtube-worker</span>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="ideas">Ideas</button>
+    <button class="tab-btn" data-tab="productions">Productions</button>
+  </nav>
+
+  <main>
+    <!-- IDEAS TAB -->
+    <section id="tab-ideas" class="tab-panel active">
+      <div class="master-detail">
+        <div class="master">
+          <form id="new-idea-form" class="card">
+            <h2>New idea</h2>
+            <input type="text" id="idea-title" placeholder="Title" required>
+            <textarea id="idea-notes" placeholder="Notes (optional)"></textarea>
+            <input type="text" id="idea-type" placeholder="Type (optional, e.g. youtube)">
+            <button type="submit">Create idea</button>
+          </form>
+          <div class="list-header">
+            <h2>Ideas</h2>
+            <button id="refresh-ideas" class="link-btn">Refresh</button>
+          </div>
+          <ul id="ideas-list" class="item-list"></ul>
+        </div>
+        <div class="detail card" id="idea-detail">
+          <p class="empty-state">Select an idea to see details.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRODUCTIONS TAB -->
+    <section id="tab-productions" class="tab-panel">
+      <div class="master-detail">
+        <div class="master">
+          <form id="new-production-form" class="card">
+            <h2>New production</h2>
+            <select id="production-idea-select" required>
+              <option value="">Select a scripted idea…</option>
+            </select>
+            <button type="submit">Create production</button>
+          </form>
+          <div class="list-header">
+            <h2>Productions</h2>
+            <button id="refresh-productions" class="link-btn">Refresh</button>
+          </div>
+          <ul id="productions-list" class="item-list"></ul>
+        </div>
+        <div class="detail card" id="production-detail">
+          <p class="empty-state">Select a production to see details.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

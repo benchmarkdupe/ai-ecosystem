@@ -60,18 +60,41 @@ test('computeProfitabilityScore inverts competition and startupDifficulty', () =
   assert.equal(score, 7.8);
 });
 
-test('analyzeOpportunity calls the AI Gateway (not OpenRouter) and returns structured output', async (t) => {
+test('analyzeOpportunity runs an analyst -> critic chain and returns both passes', async (t) => {
   t.after(() => mock.restoreAll());
+
+  const CRITIC_JSON = JSON.stringify({
+    demand: { score: 6, reasoning: 'critic thinks demand is overstated' },
+    competition: { score: 2, reasoning: 'few players' },
+    monetizationPotential: { score: 7, reasoning: 'subscriptions work well' },
+    startupDifficulty: { score: 3, reasoning: 'easy to launch' },
+    automationPotential: { score: 9, reasoning: 'mostly automatable' },
+  });
+
+  let callCount = 0;
   const generateMock = mock.method(gatewayClient, 'generate', async (prompt, model) => {
+    callCount += 1;
     assert.match(prompt, /Idea: """a pet-sitting marketplace"""/);
-    return VALID_DIMENSIONS_JSON;
+    if (callCount === 2) {
+      // The critic's prompt should include the analyst's draft for review.
+      assert.match(prompt, /"demand"/);
+      assert.match(prompt, /high interest/);
+    }
+    return callCount === 1 ? VALID_DIMENSIONS_JSON : CRITIC_JSON;
   });
 
   const result = await analyzeOpportunity({ idea: 'a pet-sitting marketplace' });
 
-  assert.equal(generateMock.mock.callCount(), 1);
+  assert.equal(generateMock.mock.callCount(), 2);
   assert.equal(result.idea, 'a pet-sitting marketplace');
-  assert.equal(result.profitabilityScore, 7.8);
   assert.ok(result.generatedAt);
-  assert.equal(result.analysis.demand.score, 8);
+
+  // Analyst's draft is preserved...
+  assert.equal(result.draftAnalysis.demand.score, 8);
+  // ...but the critic's revision is authoritative.
+  assert.equal(result.analysis.demand.score, 6);
+  assert.equal(result.profitabilityScore, computeProfitabilityScore(parseAnalysis(CRITIC_JSON)));
+
+  assert.equal(result.modelsUsed.length, 2);
+  assert.deepEqual(result.modelsUsed.map((m) => m.role), ['analyst', 'critic']);
 });

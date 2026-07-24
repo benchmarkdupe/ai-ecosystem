@@ -1,4 +1,7 @@
-const gatewayClient = require('./gatewayClient');
+const { runChain, extractJson } = require('./agentChain');
+
+const AI_MODEL_DRAFT = process.env.AI_MODEL_DRAFT || undefined;
+const AI_MODEL_CRITIC = process.env.AI_MODEL_CRITIC || undefined;
 
 class ScriptParseError extends Error {
   constructor(message, raw) {
@@ -37,10 +40,26 @@ ${notes ? `\nNotes: ${notes}` : ''}
 ${research ? `\nResearch context (may be partial):\n${JSON.stringify(research)}` : ''}`;
 }
 
-function extractJson(text) {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-  return candidate.trim();
+function buildEditorPrompt({ title, notes, research }, draftScript) {
+  return `You are a senior YouTube script editor. A junior writer drafted the script below. Your job is to tighten it, not rubber-stamp it: sharpen the hook so it earns the first 5 seconds, fix any scene that's confusing, boring, or too long for TTS pacing, and make sure the call to action is natural.
+
+Idea: """${title}"""
+${notes ? `\nNotes: ${notes}` : ''}
+${research ? `\nResearch context (may be partial):\n${JSON.stringify(research)}` : ''}
+
+Draft script:
+${JSON.stringify(draftScript, null, 2)}
+
+Return your revised version. Return ONLY valid JSON, with no markdown formatting and no commentary, in exactly this shape:
+{
+  "title": string,
+  "hook": string,
+  "scenes": [
+    { "sceneNumber": number, "voiceover": string, "visual": string }
+  ],
+  "callToAction": string,
+  "estimatedDurationSeconds": number
+}`;
 }
 
 function parseScript(text) {
@@ -78,11 +97,32 @@ function parseScript(text) {
   };
 }
 
+// Two-agent chain: a writer drafts the script, then an editor (a separate,
+// reasoning-oriented model) revises it. The editor's version is what ships.
 async function generateScript({ title, notes, research, model }) {
-  const prompt = buildScriptPrompt({ title, notes, research });
-  const text = await gatewayClient.generate(prompt, model);
-  const script = parseScript(text);
-  return { ...script, generatedAt: new Date().toISOString() };
+  const steps = [
+    {
+      role: 'writer',
+      model: model || AI_MODEL_DRAFT,
+      buildPrompt: () => buildScriptPrompt({ title, notes, research }),
+      parse: parseScript,
+    },
+    {
+      role: 'editor',
+      model: AI_MODEL_CRITIC,
+      buildPrompt: (prior) => buildEditorPrompt({ title, notes, research }, prior.writer),
+      parse: parseScript,
+    },
+  ];
+
+  const { finalOutput, prior, trace } = await runChain(steps, title);
+
+  return {
+    ...finalOutput,
+    draftScript: prior.writer,
+    modelsUsed: trace,
+    generatedAt: new Date().toISOString(),
+  };
 }
 
-module.exports = { generateScript, buildScriptPrompt, parseScript, ScriptParseError };
+module.exports = { generateScript, buildScriptPrompt, buildEditorPrompt, parseScript, ScriptParseError };

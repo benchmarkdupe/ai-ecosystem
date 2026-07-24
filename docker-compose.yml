@@ -5,7 +5,7 @@ services:
       - "3000:3000"
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENROUTER_DEFAULT_MODEL=${OPENROUTER_DEFAULT_MODEL:-openai/gpt-4o-mini}
+      - OPENROUTER_DEFAULT_MODEL=${OPENROUTER_DEFAULT_MODEL:-openai/gpt-oss-20b:free}
       - API_KEY=${API_KEY:-}
     restart: unless-stopped
 
@@ -16,6 +16,8 @@ services:
     environment:
       - AI_GATEWAY_URL=http://ai-gateway:3000
       - API_KEY=${API_KEY:-}
+      - AI_MODEL_DRAFT=${AI_MODEL_DRAFT:-openai/gpt-oss-20b:free}
+      - AI_MODEL_CRITIC=${AI_MODEL_CRITIC:-nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free}
     volumes:
       - ./storage/db/opportunity-engine:/app/data
     depends_on:
@@ -40,4 +42,20 @@ services:
     depends_on:
       - ai-gateway
       - opportunity-engine
+    restart: unless-stopped
+
+  dashboard:
+    build: ./services/dashboard
+    ports:
+      - "8080:8080"
+    environment:
+      - OPPORTUNITY_ENGINE_URL=http://opportunity-engine:3001
+      - YOUTUBE_WORKER_URL=http://youtube-worker:3002
+      - API_KEY=${API_KEY:-}
+      - VIDEO_STORAGE_DIR=/app/videos
+    volumes:
+      - ./storage/videos:/app/videos:ro
+    depends_on:
+      - opportunity-engine
+      - youtube-worker
     restart: unless-stopped

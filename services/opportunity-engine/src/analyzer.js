@@ -1,4 +1,7 @@
-const gatewayClient = require('./gatewayClient');
+const { runChain, extractJson } = require('./agentChain');
+
+const AI_MODEL_DRAFT = process.env.AI_MODEL_DRAFT || undefined;
+const AI_MODEL_CRITIC = process.env.AI_MODEL_CRITIC || undefined;
 
 const DIMENSIONS = [
   'demand',
@@ -53,10 +56,25 @@ Idea: """${idea}"""
 ${context ? `\nAdditional context from data sources (may be partial or unavailable):\n${JSON.stringify(context)}` : ''}`;
 }
 
-function extractJson(text) {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-  return candidate.trim();
+function buildCriticPrompt(idea, context, draftAnalysis) {
+  return `You are a skeptical senior analyst reviewing a junior analyst's scoring of a business idea. Your job is to catch overly optimistic or lazy scoring, not to rubber-stamp it.
+
+Idea: """${idea}"""
+${context ? `\nAdditional context from data sources (may be partial or unavailable):\n${JSON.stringify(context)}` : ''}
+
+Junior analyst's draft scoring:
+${JSON.stringify(draftAnalysis, null, 2)}
+
+Re-score the same 5 dimensions from 0 to 10 yourself. Where you agree with the draft, you may keep the same score but should sharpen the reasoning. Where you disagree, change the score and explain specifically why the draft was wrong. Do not just copy the draft.
+
+Return ONLY valid JSON, with no markdown formatting and no commentary, in exactly this shape:
+{
+  "demand": { "score": number, "reasoning": string },
+  "competition": { "score": number, "reasoning": string },
+  "monetizationPotential": { "score": number, "reasoning": string },
+  "startupDifficulty": { "score": number, "reasoning": string },
+  "automationPotential": { "score": number, "reasoning": string }
+}`;
 }
 
 function parseAnalysis(text) {
@@ -96,16 +114,34 @@ function computeProfitabilityScore(dimensions) {
   return Math.round((total + 1e-9) * 10) / 10;
 }
 
+// Two-agent chain: an analyst drafts the scoring, then a critic (a separate,
+// reasoning-oriented model) reviews and can override it. The critic's output
+// is authoritative - it's what profitabilityScore is computed from.
 async function analyzeOpportunity({ idea, context, model }) {
-  const prompt = buildPrompt(idea, context);
-  const text = await gatewayClient.generate(prompt, model);
-  const dimensions = parseAnalysis(text);
-  const profitabilityScore = computeProfitabilityScore(dimensions);
+  const steps = [
+    {
+      role: 'analyst',
+      model: model || AI_MODEL_DRAFT,
+      buildPrompt: () => buildPrompt(idea, context),
+      parse: parseAnalysis,
+    },
+    {
+      role: 'critic',
+      model: AI_MODEL_CRITIC,
+      buildPrompt: (prior) => buildCriticPrompt(idea, context, prior.analyst),
+      parse: parseAnalysis,
+    },
+  ];
+
+  const { finalOutput, prior, trace } = await runChain(steps, idea);
+  const profitabilityScore = computeProfitabilityScore(finalOutput);
 
   return {
     idea,
-    analysis: dimensions,
+    analysis: finalOutput,
+    draftAnalysis: prior.analyst,
     profitabilityScore,
+    modelsUsed: trace,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -113,6 +149,7 @@ async function analyzeOpportunity({ idea, context, model }) {
 module.exports = {
   analyzeOpportunity,
   buildPrompt,
+  buildCriticPrompt,
   parseAnalysis,
   computeProfitabilityScore,
   AnalysisParseError,

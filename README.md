@@ -1,15 +1,21 @@
 # AI Ecosystem
 
 Backend intelligence and automation engine for autonomous content businesses, built for
-personal use first. An external frontend (e.g. Opportunity OS) is expected to consume
-these services over HTTP — this repo has no frontend of its own.
+personal use first. Includes a minimal built-in web GUI (`dashboard`) so the whole
+Idea -> YouTube pipeline is usable without touching the terminal. An external frontend
+(e.g. Opportunity OS) can also consume these services over HTTP directly.
 
 ```
-        EXTERNAL FRONTEND (e.g. Opportunity OS)
-                     |
-                API requests (x-api-key)
-                     |
-                     v
+        BROWSER (you)                EXTERNAL FRONTEND (e.g. Opportunity OS)
+              |                                    |
+              v                                    |
+        +-----------+                              |
+        | dashboard |  (GUI + reverse proxy)        |
+        +-----------+                              |
+              |                                     |
+              +-------------- API requests (x-api-key) --------------+
+                                     |
+                                     v
    +-----------------------------------------------+
    |                AI ECOSYSTEM                    |
    |                                                 |
@@ -28,6 +34,7 @@ these services over HTTP — this repo has no frontend of its own.
 
 | Service | Port | Owns | Status |
 |---|---|---|---|
+| [`dashboard`](services/dashboard) | 8080 | Web GUI + reverse proxy for the two APIs below | working |
 | [`ai-gateway`](services/ai-gateway) | 3000 | Single OpenRouter credential; proxies text generation for every other service | working |
 | [`opportunity-engine`](services/opportunity-engine) | 3001 | Idea record: research/scoring, YouTube script generation | working |
 | [`youtube-worker`](services/youtube-worker) | 3002 | Production record: video rendering, review, YouTube publish, analytics | working |
@@ -40,7 +47,9 @@ these services over HTTP — this repo has no frontend of its own.
 Idea -> Research -> Script -> Video Production -> Review -> YouTube Publish -> Analytics
 ```
 
-Concretely, against the running services:
+**Easiest way to run this: open the dashboard at `http://<your-server>:8080` and work
+through Ideas -> Productions in the browser.** Every step below has a matching button
+there. The curl walkthrough is kept for scripting/debugging.
 
 ```bash
 # 1. Create an idea
@@ -49,13 +58,15 @@ curl -X POST http://localhost:3001/ideas \
   -d '{"title": "Why compound interest feels like magic"}'
 # -> { "id": 1, "status": "new", ... }
 
-# 2. Research it (scores demand/competition/monetization/etc via the AI Gateway)
+# 2. Research it: an analyst model drafts the scoring, a critic model
+#    (separate, more reasoning-heavy) reviews and can override it - see
+#    services/opportunity-engine/README.md#multi-agent-researchscript-chains
 curl -X POST http://localhost:3001/ideas/1/research
-# -> status: "researched", profitabilityScore, research.analysis populated
+# -> status: "researched", profitabilityScore, research.analysis (critic's) + research.draftAnalysis (analyst's)
 
-# 3. Generate a script (scene-by-scene, ready for production)
+# 3. Generate a script: same pattern, writer drafts then editor revises
 curl -X POST http://localhost:3001/ideas/1/script
-# -> status: "scripted", script.scenes populated
+# -> status: "scripted", script.scenes (editor's) + script.draftScript (writer's)
 
 # 4. Start a production from the scripted idea
 curl -X POST http://localhost:3002/productions -H 'Content-Type: application/json' \
@@ -92,7 +103,13 @@ docker compose up -d --build
 docker compose ps
 ```
 
-- `ai-gateway`, `opportunity-engine`, `youtube-worker` each expose `GET /health`.
+- Open `http://<your-server>:8080` for the dashboard GUI.
+- The default models (`OPENROUTER_DEFAULT_MODEL`, `AI_MODEL_DRAFT`, `AI_MODEL_CRITIC`) are
+  all OpenRouter free-tier (`:free`) models — no credits required, just a free OpenRouter
+  account/API key. Free tier is capped at 50 requests/day, 20/min account-wide; research +
+  script on one idea uses 4 of those (2-step chain each). If a default model ID stops
+  resolving, check https://openrouter.ai/models?max_price=0 for current free models.
+- `ai-gateway`, `opportunity-engine`, `youtube-worker`, `dashboard` each expose `GET /health`.
 - SQLite databases persist under `storage/db/<service>/`; rendered videos under
   `storage/videos/`. Both are host-mounted volumes, so data survives
   `docker compose restart`/`down`.
